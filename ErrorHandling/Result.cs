@@ -8,6 +8,7 @@ namespace ResultOfTask
         {
         }
     }
+
     public struct Result<T>
     {
         public Result(string error, T value = default(T))
@@ -15,13 +16,16 @@ namespace ResultOfTask
             Error = error;
             Value = value;
         }
+
         public string Error { get; }
         internal T Value { get; }
+
         public T GetValueOrThrow()
         {
             if (IsSuccess) return Value;
             throw new InvalidOperationException($"No value. Only Error {Error}");
         }
+
         public bool IsSuccess => Error == null;
     }
 
@@ -58,21 +62,45 @@ namespace ResultOfTask
             this Result<TInput> input,
             Func<TInput, TOutput> continuation)
         {
-            throw new NotImplementedException();
+            return input.Match(value => Of(() => continuation(value)));
         }
 
         public static Result<TOutput> Then<TInput, TOutput>(
             this Result<TInput> input,
             Func<TInput, Result<TOutput>> continuation)
         {
-            throw new NotImplementedException();
+            return input.Match(value => continuation(input.Value));
+        }
+
+        public static Result<T> ReplaceError<T>(this Result<T> result, Func<string, string> error)
+        {
+            return result.Match(_ => result, fail => Fail<T>(error(fail.Error)));
+        }
+
+        public static Result<T> RefineError<T>(this Result<T> result, string error)
+        {
+            return result.ReplaceError(e => $"{error}. {e}");
+        }
+
+        public static Result<TOutput> Match<TInput, TOutput>(this Result<TInput> input,
+            Func<TInput, Result<TOutput>> successful, Func<Result<TInput>, Result<TOutput>> fail)
+        {
+            return input.IsSuccess ? successful(input.Value) : fail(input);
+        }
+
+        public static Result<TOutput> Match<TInput, TOutput>(this Result<TInput> input,
+            Func<TInput, Result<TOutput>> successful)
+        {
+            return input.Match(successful, result => Fail<TOutput>(result.Error));
         }
 
         public static Result<TInput> OnFail<TInput>(
             this Result<TInput> input,
             Action<string> handleError)
         {
-            throw new NotImplementedException();
+            if (!input.IsSuccess)
+                handleError(input.Error);
+            return input;
         }
     }
 }

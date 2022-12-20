@@ -1,5 +1,5 @@
-﻿using Ninject;
-using System;
+﻿using System;
+using Ninject;
 
 namespace ConwaysGameOfLife
 {

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Security.Cryptography.X509Certificates;
+using ResultOf;
 
 namespace FileSenderRailway
 {
@@ -25,40 +26,62 @@ namespace FileSenderRailway
 
         public IEnumerable<FileSendResult> SendFiles(FileContent[] files, X509Certificate certificate)
         {
+            var signDocument = GetSignDocumentFunction();
+            var validateDocument = GetValidateDocumentFunction();
             foreach (var file in files)
             {
-                string errorMessage = null;
-                try
-                {
-                    Document doc = recognizer.Recognize(file);
-                    if (!IsValidFormatVersion(doc))
-                        throw new FormatException("Invalid format version");
-                    if (!IsValidTimestamp(doc))
-                        throw new FormatException("Too old document");
-                    doc.Content = cryptographer.Sign(doc.Content, certificate);
-                    sender.Send(doc);
-                }
-                catch (FormatException e)
-                {
-                    errorMessage = "Can't prepare file to send. " + e.Message;
-                }
-                catch (InvalidOperationException e)
-                {
-                    errorMessage = "Can't send. " + e.Message;
-                }
-                yield return new FileSendResult(file, errorMessage);
+                yield return SendFile(file, signDocument, validateDocument);
+            }
+
+            Func<Document, Document> GetSignDocumentFunction()
+            {
+                return document => document with { Content = cryptographer.Sign(document.Content, certificate) };
+            }
+
+            Func<Document, Result<Document>> GetValidateDocumentFunction()
+            {
+                return doc => ValidateDocument(doc, now().AddMonths(-1));
             }
         }
 
-        private bool IsValidFormatVersion(Document doc)
+        private FileSendResult SendFile(FileContent file, Func<Document, Document> signDocument,
+            Func<Document, Result<Document>> validateDocument)
         {
-            return doc.Format == "4.0" || doc.Format == "3.1";
+            var result = PrepareFileToSend(file,
+                    signDocument,
+                    recognizer.Recognize,
+                    validateDocument)
+                .Then(sender.Send)
+                .RefineError("Can't prepare file to send");
+            return new FileSendResult(file, result.Error);
         }
 
-        private bool IsValidTimestamp(Document doc)
+        public static Result<Document> PrepareFileToSend(FileContent file,
+            Func<Document, Document> signDocument,
+            Func<FileContent, Document> recognize,
+            Func<Document, Result<Document>> validateDocument)
         {
-            var oneMonthBefore = now().AddMonths(-1);
-            return doc.Created > oneMonthBefore;
+            return file.AsResult()
+                .Then(recognize)
+                .Then(validateDocument)
+                .Then(signDocument);
+        }
+
+        private static Result<Document> ValidateDocument(Document doc, DateTime monthBefore)
+        {
+            return IsValidFormatVersion(doc)
+                .Then(_ => IsValidTimestamp(doc, monthBefore))
+                .Then(_ => doc);
+        }
+
+        private static Result<bool> IsValidFormatVersion(Document doc)
+        {
+            return doc.Format is "4.0" or "3.1";
+        }
+
+        private static Result<bool> IsValidTimestamp(Document doc, DateTime monthBefore)
+        {
+            return doc.Created > monthBefore;
         }
     }
 }

@@ -7,6 +7,7 @@ using ApprovalTests.Reporters;
 using FakeItEasy;
 using FluentAssertions;
 using NUnit.Framework;
+using ResultOf;
 
 namespace FileSenderRailway
 {
@@ -22,6 +23,74 @@ namespace FileSenderRailway
         private readonly FileContent file = new FileContent(Guid.NewGuid().ToString("N"), Guid.NewGuid().ToByteArray());
         private readonly DateTime now = new DateTime(2000, 01, 01);
         private readonly X509Certificate certificate = new X509Certificate();
+
+
+        [Test]
+        public void PrepareFileToSend_Fail_RecognizeFail()
+        {
+            var actual = FileSender.PrepareFileToSend(
+                file,
+                x => x,
+                x => throw new Exception(),
+                x => x.AsResult());
+
+            actual.IsSuccess.Should().BeFalse();
+        }
+
+        [Test]
+        public void PrepareFileToSend_Fail_SignFail()
+        {
+            var actual = FileSender.PrepareFileToSend(
+                file,
+                x => throw new Exception(),
+                GetDocument,
+                x => x.AsResult());
+
+            actual.IsSuccess.Should().BeFalse();
+        }
+
+        [Test]
+        public void PrepareFileToSend_Fail_ValidateFail()
+        {
+            var actual = FileSender.PrepareFileToSend(
+                file,
+                x => x,
+                GetDocument,
+                x => Result.Fail<Document>("fail"));
+
+            actual.IsSuccess.Should().BeFalse();
+        }
+
+        [Test]
+        public void PrepareFileToSend_BeOk_AllOk()
+        {
+            var actual = FileSender.PrepareFileToSend(
+                file,
+                x => x,
+                GetDocument,
+                x => x.AsResult());
+
+            actual.IsSuccess.Should().BeTrue();
+        }
+
+        [Test]
+        public void PrepareFileToSend_BeSameValue_AllOk()
+        {
+            var expectedValue = GetDocument(file);
+
+            var actual = FileSender.PrepareFileToSend(
+                file,
+                x => x,
+                GetDocument,
+                x => x.AsResult());
+
+            actual.Value.Should().BeEquivalentTo(expectedValue);
+        }
+
+        private Document GetDocument(FileContent x)
+        {
+            return new(x.Name, x.Content, now, string.Empty);
+        }
 
         [SetUp]
         public void SetUp()
@@ -41,7 +110,7 @@ namespace FileSenderRailway
             PrepareDocument(file, signed, now.AddDays(-daysBeforeNow), format);
 
             fileSender.SendFiles(new[] { file }, certificate)
-                .Should().BeEquivalentTo(new[] { new FileSendResult(file) });
+                .Should().BeEquivalentTo(new FileSendResult(file));
             A.CallTo(() => sender.Send(A<Document>.That.Matches(d => d.Content == signed)))
                 .MustHaveHappened();
         }
