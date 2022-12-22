@@ -16,10 +16,6 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Compile Remove="Solved\**" />
-    </ItemGroup>
-
-    <ItemGroup>
       <EmbeddedResource Remove="Solved\**" />
     </ItemGroup>
 

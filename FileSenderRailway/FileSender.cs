@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 using ResultOf;
 
@@ -28,10 +29,7 @@ namespace FileSenderRailway
         {
             var signDocument = GetSignDocumentFunction();
             var validateDocument = GetValidateDocumentFunction();
-            foreach (var file in files)
-            {
-                yield return SendFile(file, signDocument, validateDocument);
-            }
+            return files.Select(file => SendFile(file, signDocument, validateDocument)).ToList();
 
             Func<Document, Document> GetSignDocumentFunction()
             {
@@ -47,13 +45,12 @@ namespace FileSenderRailway
         private FileSendResult SendFile(FileContent file, Func<Document, Document> signDocument,
             Func<Document, Result<Document>> validateDocument)
         {
-            var result = PrepareFileToSend(file,
+            return new FileSendResult(file, PrepareFileToSend(file,
                     signDocument,
                     recognizer.Recognize,
                     validateDocument)
                 .Then(sender.Send)
-                .RefineError("Can't prepare file to send");
-            return new FileSendResult(file, result.Error);
+                .RefineError("Can't prepare file to send").Error);
         }
 
         public static Result<Document> PrepareFileToSend(FileContent file,
